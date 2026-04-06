@@ -1,0 +1,33 @@
+{
+  "name": "cloudflare-demo-project",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker demo integrating KV, D1, and R2 storage services with Hono framework",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --coverage"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "hono",
+    "kv",
+    "d1",
+    "r2"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0",
+    "wrangler": "^3.22.0",
+    "fast-check": "^3.15.0"
+  }
+}

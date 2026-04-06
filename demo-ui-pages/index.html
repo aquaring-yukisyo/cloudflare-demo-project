@@ -1,0 +1,2073 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudflare Worker API Demo UI</title>
+  <style>
+    /* リセットとベーススタイル */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary-color: #f38020;
+      --secondary-color: #0051c3;
+      --success-color: #22c55e;
+      --warning-color: #f97316;
+      --error-color: #ef4444;
+      --bg-color: #f9fafb;
+      --surface-color: #ffffff;
+      --text-primary: #1f2937;
+      --text-secondary: #6b7280;
+      --border-color: #e5e7eb;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --spacing-xs: 0.5rem;
+      --spacing-sm: 0.75rem;
+      --spacing-md: 1rem;
+      --spacing-lg: 1.5rem;
+      --spacing-xl: 2rem;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ヘッダー */
+    header {
+      background-color: var(--surface-color);
+      padding: var(--spacing-lg) var(--spacing-xl);
+      box-shadow: var(--shadow-sm);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--primary-color);
+      margin-bottom: var(--spacing-md);
+    }
+
+    .header-controls {
+      display: flex;
+      gap: var(--spacing-md);
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .api-config {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      flex: 1;
+      min-width: 300px;
+    }
+
+    .api-config label {
+      font-weight: 500;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .api-config input {
+      flex: 1;
+      padding: var(--spacing-sm) var(--spacing-md);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .api-config input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(243, 128, 32, 0.1);
+    }
+
+    .health-status {
+      margin-top: var(--spacing-md);
+      padding: var(--spacing-md);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-color);
+      display: none;
+    }
+
+    .health-status.visible {
+      display: block;
+    }
+
+    .health-status .service-status {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-xs);
+    }
+
+    .health-status .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .health-status .status-indicator.healthy {
+      background-color: var(--success-color);
+    }
+
+    .health-status .status-indicator.unhealthy {
+      background-color: var(--error-color);
+    }
+
+    /* タブナビゲーション */
+    .tab-navigation {
+      display: flex;
+      background-color: var(--surface-color);
+      border-bottom: 2px solid var(--border-color);
+      padding: 0 var(--spacing-xl);
+      gap: var(--spacing-xs);
+    }
+
+    .tab {
+      padding: var(--spacing-md) var(--spacing-lg);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      top: 2px;
+    }
+
+    .tab:hover {
+      color: var(--primary-color);
+      background-color: var(--bg-color);
+    }
+
+    .tab.active {
+      color: var(--primary-color);
+      border-bottom-color: var(--primary-color);
+      background-color: transparent;
+    }
+
+    .tab:focus {
+      outline: 2px solid var(--primary-color);
+      outline-offset: -2px;
+    }
+
+    /* メインコンテンツレイアウト */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--spacing-lg);
+      padding: var(--spacing-xl);
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 1024px) {
+      main {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    /* サービスパネル */
+    .service-panel {
+      background-color: var(--surface-color);
+      border-radius: var(--radius-lg);
+      padding: var(--spacing-xl);
+      box-shadow: var(--shadow-md);
+      display: none;
+    }
+
+    .service-panel.active {
+      display: block;
+    }
+
+    .service-panel h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: var(--spacing-lg);
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: var(--spacing-sm);
+    }
+
+    /* 操作フォーム */
+    .operation-form {
+      margin-bottom: var(--spacing-xl);
+      padding: var(--spacing-lg);
+      background-color: var(--bg-color);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .operation-form h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: var(--spacing-md);
+      color: var(--text-primary);
+    }
+
+    .form-group {
+      margin-bottom: var(--spacing-md);
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: var(--spacing-xs);
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: var(--spacing-sm) var(--spacing-md);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(243, 128, 32, 0.1);
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    /* ボタン */
+    button {
+      padding: var(--spacing-sm) var(--spacing-lg);
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: var(--shadow-sm);
+    }
+
+    button:hover:not(:disabled) {
+      background-color: #d97019;
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: var(--shadow-sm);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button:focus {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+
+    #health-check-btn {
+      background-color: var(--secondary-color);
+    }
+
+    #health-check-btn:hover:not(:disabled) {
+      background-color: #0046a8;
+    }
+
+    /* レスポンス表示エリア */
+    #response-container {
+      background-color: var(--surface-color);
+      border-radius: var(--radius-lg);
+      padding: var(--spacing-xl);
+      box-shadow: var(--shadow-md);
+      position: sticky;
+      top: var(--spacing-lg);
+      max-height: calc(100vh - 2 * var(--spacing-lg));
+      overflow-y: auto;
+    }
+
+    #response-container h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: var(--spacing-lg);
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: var(--spacing-sm);
+    }
+
+    .response-display {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    .response-display .placeholder {
+      color: var(--text-secondary);
+      font-style: italic;
+      text-align: center;
+      padding: var(--spacing-xl);
+    }
+
+    .response-display .status-line {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-md);
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: var(--radius-sm);
+      background-color: var(--bg-color);
+      font-weight: 600;
+    }
+
+    .response-display .status-code {
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 0.875rem;
+    }
+
+    .response-display .status-code.success {
+      background-color: var(--success-color);
+      color: white;
+    }
+
+    .response-display .status-code.client-error {
+      background-color: var(--warning-color);
+      color: white;
+    }
+
+    .response-display .status-code.server-error {
+      background-color: var(--error-color);
+      color: white;
+    }
+
+    .response-display .timestamp {
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      margin-left: auto;
+    }
+
+    .response-display .response-headers {
+      margin-bottom: var(--spacing-md);
+      padding: var(--spacing-md);
+      background-color: var(--bg-color);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--secondary-color);
+    }
+
+    .response-display .response-headers h4 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: var(--spacing-xs);
+      color: var(--text-primary);
+    }
+
+    .response-display .response-headers pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-secondary);
+    }
+
+    .response-display .response-body {
+      padding: var(--spacing-md);
+      background-color: #1e293b;
+      border-radius: var(--radius-sm);
+      overflow-x: auto;
+    }
+
+    .response-display .response-body pre {
+      margin: 0;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .response-display .error-message {
+      padding: var(--spacing-md);
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      border-left: 4px solid var(--error-color);
+      border-radius: var(--radius-sm);
+      color: #991b1b;
+    }
+
+    .response-display .error-message h4 {
+      font-weight: 600;
+      margin-bottom: var(--spacing-xs);
+    }
+
+    /* ローディングインジケーター */
+    .loading-indicator {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: var(--spacing-sm);
+      padding: var(--spacing-md);
+      background-color: var(--bg-color);
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--spacing-md);
+    }
+
+    .loading-indicator.visible {
+      display: flex;
+    }
+
+    .loading-spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--border-color);
+      border-top-color: var(--primary-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-indicator span {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    /* レスポンシブデザイン */
+    @media (max-width: 1023px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      #response-container {
+        position: static;
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 768px) {
+      header {
+        padding: var(--spacing-md);
+      }
+
+      header h1 {
+        font-size: 1.5rem;
+      }
+
+      .header-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .api-config {
+        flex-direction: column;
+        align-items: stretch;
+        min-width: 0;
+      }
+
+      .tab-navigation {
+        padding: 0 var(--spacing-md);
+      }
+
+      .tab {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.875rem;
+      }
+
+      main {
+        padding: var(--spacing-md);
+      }
+
+      .service-panel,
+      #response-container {
+        padding: var(--spacing-md);
+      }
+
+      .operation-form {
+        padding: var(--spacing-md);
+      }
+    }
+
+    @media (max-width: 480px) {
+      header h1 {
+        font-size: 1.25rem;
+      }
+
+      .tab {
+        flex: 1;
+        text-align: center;
+        padding: var(--spacing-sm);
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+
+    /* アクセシビリティ */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* フォーカス表示の強化 */
+    *:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+
+    /* ハイコントラストモード対応 */
+    @media (prefers-contrast: high) {
+      :root {
+        --border-color: #000000;
+        --text-secondary: #000000;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header>
+    <h1>Cloudflare Worker API Demo UI</h1>
+    <div class="header-controls">
+      <div class="api-config">
+        <label for="api-base-url">API Base URL:</label>
+        <input 
+          type="text" 
+          id="api-base-url" 
+          placeholder="http://localhost:8787"
+          aria-label="API Base URL"
+        >
+      </div>
+      <div class="api-config">
+        <label for="master-api-key">Master Key (KV):</label>
+        <input 
+          type="password" 
+          id="master-api-key" 
+          placeholder="api-key"
+          aria-label="Master API Key for KV operations"
+        >
+      </div>
+      <div class="api-config">
+        <label for="d1-r2-api-key">API Key (D1/R2):</label>
+        <input 
+          type="password" 
+          id="d1-r2-api-key" 
+          placeholder="Enter your API key"
+          aria-label="API Key for D1 and R2 operations"
+        >
+      </div>
+      <button id="health-check-btn" type="button">Health Check</button>
+    </div>
+    <div id="health-status" class="health-status" role="status" aria-live="polite"></div>
+  </header>
+
+  <!-- タブナビゲーション -->
+  <nav class="tab-navigation" role="tablist">
+    <button 
+      class="tab active" 
+      data-tab="api-keys" 
+      role="tab" 
+      aria-selected="true" 
+      aria-controls="api-keys-panel"
+      id="api-keys-tab"
+    >
+      API Keys
+    </button>
+    <button 
+      class="tab" 
+      data-tab="kv" 
+      role="tab" 
+      aria-selected="false" 
+      aria-controls="kv-panel"
+      id="kv-tab"
+    >
+      KV
+    </button>
+    <button 
+      class="tab" 
+      data-tab="d1" 
+      role="tab" 
+      aria-selected="false" 
+      aria-controls="d1-panel"
+      id="d1-tab"
+    >
+      D1
+    </button>
+    <button 
+      class="tab" 
+      data-tab="r2" 
+      role="tab" 
+      aria-selected="false" 
+      aria-controls="r2-panel"
+      id="r2-tab"
+    >
+      R2
+    </button>
+  </nav>
+
+  <!-- メインコンテンツエリア -->
+  <main>
+    <!-- APIキー管理パネル -->
+    <section 
+      id="api-keys-panel" 
+      class="service-panel active" 
+      role="tabpanel" 
+      aria-labelledby="api-keys-tab"
+    >
+      <h2>API Key Management</h2>
+      
+      <div class="operation-form" style="background-color: #fef3c7; border-color: #fbbf24;">
+        <h3>⚠️ Authentication Required</h3>
+        <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+          API Key management requires the Master Key (Aquaring@74). Please enter it in the header above.
+        </p>
+        <p style="margin-bottom: 0; color: var(--text-secondary); font-size: 0.875rem;">
+          <strong>Purpose:</strong> Register API keys here to grant access to D1 and R2 operations.
+        </p>
+      </div>
+
+      <form id="api-key-register-form" class="operation-form">
+        <h3>Register New API Key</h3>
+        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+          Create a new API key that can be used to access D1 database and R2 storage operations.
+        </p>
+        <div class="form-group">
+          <label for="api-key-register-key">API Key:</label>
+          <input 
+            type="text" 
+            id="api-key-register-key" 
+            name="key" 
+            placeholder="Enter new API key (e.g., my-app-key-2024)"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="api-key-register-description">Description:</label>
+          <textarea 
+            id="api-key-register-description" 
+            name="description" 
+            placeholder="Enter description (e.g., Production API key for mobile app)"
+            rows="2"
+            required
+          ></textarea>
+        </div>
+        <button type="submit">Register API Key</button>
+      </form>
+
+      <div class="operation-form">
+        <h3>List All API Keys</h3>
+        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+          View all registered API keys and their descriptions.
+        </p>
+        <button type="button" id="api-key-list-btn">List All API Keys</button>
+      </div>
+
+      <form id="api-key-revoke-form" class="operation-form">
+        <h3>Revoke API Key</h3>
+        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+          Remove an API key to revoke access to D1 and R2 operations.
+        </p>
+        <div class="form-group">
+          <label for="api-key-revoke-key">API Key:</label>
+          <input 
+            type="text" 
+            id="api-key-revoke-key" 
+            name="key" 
+            placeholder="Enter API key to revoke"
+            required
+          >
+        </div>
+        <button type="submit" style="background-color: var(--error-color);">Revoke API Key</button>
+      </form>
+    </section>
+
+    <!-- KVパネル -->
+    <section 
+      id="kv-panel" 
+      class="service-panel" 
+      role="tabpanel" 
+      aria-labelledby="kv-tab"
+      hidden
+    >
+      <h2>KV Storage Operations</h2>
+      
+      <div class="operation-form" style="background-color: #fef3c7; border-color: #fbbf24;">
+        <h3>ℹ️ Note</h3>
+        <p style="margin-bottom: 0; color: var(--text-secondary);">
+          This tab is for general KV storage operations. For API key management, use the "API Keys" tab.
+        </p>
+      </div>
+
+      <form id="kv-store-form" class="operation-form">
+        <h3>Store Key-Value</h3>
+        <div class="form-group">
+          <label for="kv-store-key">Key:</label>
+          <input 
+            type="text" 
+            id="kv-store-key" 
+            name="key" 
+            placeholder="Enter key (e.g., user-settings)"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="kv-store-value">Value:</label>
+          <textarea 
+            id="kv-store-value" 
+            name="value" 
+            placeholder="Enter value (e.g., JSON data)"
+            rows="3"
+            required
+          ></textarea>
+        </div>
+        <button type="submit">Store</button>
+      </form>
+
+      <form id="kv-get-form" class="operation-form">
+        <h3>Get Value</h3>
+        <div class="form-group">
+          <label for="kv-get-key">Key:</label>
+          <input 
+            type="text" 
+            id="kv-get-key" 
+            name="key" 
+            placeholder="Enter key"
+            required
+          >
+        </div>
+        <button type="submit">Get</button>
+      </form>
+
+      <form id="kv-delete-form" class="operation-form">
+        <h3>Delete Key</h3>
+        <div class="form-group">
+          <label for="kv-delete-key">Key:</label>
+          <input 
+            type="text" 
+            id="kv-delete-key" 
+            name="key" 
+            placeholder="Enter key"
+            required
+          >
+        </div>
+        <button type="submit">Delete</button>
+      </form>
+
+      <div class="operation-form">
+        <h3>List All Keys</h3>
+        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+          Note: This will list all keys including API keys (with api_key: prefix)
+        </p>
+        <button type="button" id="kv-list-btn">List All Keys</button>
+      </div>
+    </section>
+
+    <!-- D1パネル -->
+    <section 
+      id="d1-panel" 
+      class="service-panel" 
+      role="tabpanel" 
+      aria-labelledby="d1-tab"
+      hidden
+    >
+      <h2>D1 Database Operations</h2>
+      
+      <form id="d1-create-user-form" class="operation-form">
+        <h3>Create User</h3>
+        <div class="form-group">
+          <label for="d1-create-name">Name:</label>
+          <input 
+            type="text" 
+            id="d1-create-name" 
+            name="name" 
+            placeholder="Enter name"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="d1-create-email">Email:</label>
+          <input 
+            type="email" 
+            id="d1-create-email" 
+            name="email" 
+            placeholder="Enter email"
+            required
+          >
+        </div>
+        <button type="submit">Create User</button>
+      </form>
+
+      <div class="operation-form">
+        <h3>Get All Users</h3>
+        <button type="button" id="d1-get-users-btn">Get All Users</button>
+      </div>
+
+      <form id="d1-get-user-form" class="operation-form">
+        <h3>Get User by ID</h3>
+        <div class="form-group">
+          <label for="d1-get-user-id">User ID:</label>
+          <input 
+            type="number" 
+            id="d1-get-user-id" 
+            name="id" 
+            placeholder="Enter user ID"
+            min="1"
+            required
+          >
+        </div>
+        <button type="submit">Get User</button>
+      </form>
+
+      <form id="d1-update-user-form" class="operation-form">
+        <h3>Update User</h3>
+        <div class="form-group">
+          <label for="d1-update-user-id">User ID:</label>
+          <input 
+            type="number" 
+            id="d1-update-user-id" 
+            name="id" 
+            placeholder="Enter user ID"
+            min="1"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="d1-update-name">Name:</label>
+          <input 
+            type="text" 
+            id="d1-update-name" 
+            name="name" 
+            placeholder="Enter new name (optional)"
+          >
+        </div>
+        <div class="form-group">
+          <label for="d1-update-email">Email:</label>
+          <input 
+            type="email" 
+            id="d1-update-email" 
+            name="email" 
+            placeholder="Enter new email (optional)"
+          >
+        </div>
+        <button type="submit">Update User</button>
+      </form>
+
+      <form id="d1-delete-user-form" class="operation-form">
+        <h3>Delete User</h3>
+        <div class="form-group">
+          <label for="d1-delete-user-id">User ID:</label>
+          <input 
+            type="number" 
+            id="d1-delete-user-id" 
+            name="id" 
+            placeholder="Enter user ID"
+            min="1"
+            required
+          >
+        </div>
+        <button type="submit">Delete User</button>
+      </form>
+    </section>
+
+    <!-- R2パネル -->
+    <section 
+      id="r2-panel" 
+      class="service-panel" 
+      role="tabpanel" 
+      aria-labelledby="r2-tab"
+      hidden
+    >
+      <h2>R2 Object Storage Operations</h2>
+      
+      <form id="r2-upload-form" class="operation-form">
+        <h3>Upload File</h3>
+        <div class="form-group">
+          <label for="r2-upload-key">Object Key:</label>
+          <input 
+            type="text" 
+            id="r2-upload-key" 
+            name="key" 
+            placeholder="Enter object key"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="r2-upload-file">File:</label>
+          <input 
+            type="file" 
+            id="r2-upload-file" 
+            name="file" 
+            required
+          >
+        </div>
+        <button type="submit">Upload</button>
+      </form>
+
+      <form id="r2-download-form" class="operation-form">
+        <h3>Download File</h3>
+        <div class="form-group">
+          <label for="r2-download-key">Object Key:</label>
+          <input 
+            type="text" 
+            id="r2-download-key" 
+            name="key" 
+            placeholder="Enter object key"
+            required
+          >
+        </div>
+        <button type="submit">Download</button>
+      </form>
+
+      <form id="r2-delete-form" class="operation-form">
+        <h3>Delete Object</h3>
+        <div class="form-group">
+          <label for="r2-delete-key">Object Key:</label>
+          <input 
+            type="text" 
+            id="r2-delete-key" 
+            name="key" 
+            placeholder="Enter object key"
+            required
+          >
+        </div>
+        <button type="submit">Delete</button>
+      </form>
+
+      <div class="operation-form">
+        <h3>List All Objects</h3>
+        <button type="button" id="r2-list-btn">List All Objects</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- レスポンス表示エリア -->
+  <aside id="response-container" role="region" aria-label="API Response">
+    <h2>Response</h2>
+    <div id="response-display" class="response-display">
+      <p class="placeholder">API responses will appear here</p>
+    </div>
+  </aside>
+
+  <script>
+    // ========================================
+    // LocalStorageManager - ローカルストレージ管理
+    // ========================================
+    class LocalStorageManager {
+      static save(key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+          console.error('Failed to save to localStorage:', error);
+        }
+      }
+
+      static load(key, defaultValue = null) {
+        try {
+          const item = localStorage.getItem(key);
+          return item ? JSON.parse(item) : defaultValue;
+        } catch (error) {
+          console.error('Failed to load from localStorage:', error);
+          return defaultValue;
+        }
+      }
+
+      static remove(key) {
+        try {
+          localStorage.removeItem(key);
+        } catch (error) {
+          console.error('Failed to remove from localStorage:', error);
+        }
+      }
+    }
+
+    // ========================================
+    // ValidationService - 入力検証
+    // ========================================
+    class ValidationError extends Error {
+      constructor(message) {
+        super(message);
+        this.name = 'ValidationError';
+      }
+    }
+
+    class ValidationService {
+      static validateRequired(value, fieldName) {
+        if (value === null || value === undefined || value === '') {
+          throw new ValidationError(`${fieldName} is required`);
+        }
+        return true;
+      }
+
+      static validateEmail(email) {
+        if (!email || !email.includes('@')) {
+          throw new ValidationError('Invalid email format');
+        }
+        return true;
+      }
+
+      static validatePositiveInteger(value, fieldName) {
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num < 1) {
+          throw new ValidationError(`${fieldName} must be a positive integer`);
+        }
+        return true;
+      }
+
+      static validateFile(file) {
+        if (!file) {
+          throw new ValidationError('File is required');
+        }
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+          throw new ValidationError('File size must be less than 10MB');
+        }
+        return true;
+      }
+    }
+
+    // ========================================
+    // APIClient - API通信
+    // ========================================
+    class APIClient {
+      constructor(baseURL) {
+        this.baseURL = baseURL;
+        this.timeout = 30000; // 30秒
+        this.masterKey = '';
+        this.d1R2ApiKey = '';
+      }
+
+      setMasterKey(key) {
+        this.masterKey = key;
+      }
+
+      setD1R2ApiKey(key) {
+        this.d1R2ApiKey = key;
+      }
+
+      async request(method, endpoint, body = null, headers = {}, useD1R2Key = false) {
+        const url = `${this.baseURL}${endpoint}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+        try {
+          const options = {
+            method,
+            headers: {
+              ...headers
+            },
+            signal: controller.signal
+          };
+
+          // APIキーヘッダーの追加
+          if (useD1R2Key && this.d1R2ApiKey) {
+            options.headers['X-API-Key'] = this.d1R2ApiKey;
+          } else if (!useD1R2Key && this.masterKey) {
+            options.headers['X-API-Key'] = this.masterKey;
+          }
+
+          if (body !== null) {
+            if (body instanceof FormData) {
+              options.body = body;
+            } else {
+              options.headers['Content-Type'] = 'application/json';
+              options.body = JSON.stringify(body);
+            }
+          }
+
+          const response = await fetch(url, options);
+          clearTimeout(timeoutId);
+
+          const responseHeaders = {};
+          response.headers.forEach((value, key) => {
+            responseHeaders[key] = value;
+          });
+
+          let responseData;
+          const contentType = response.headers.get('content-type');
+          
+          if (contentType && contentType.includes('application/json')) {
+            responseData = await response.json();
+          } else if (method === 'GET' && endpoint.startsWith('/r2/')) {
+            // R2ダウンロードの場合はBlobとして取得
+            responseData = await response.blob();
+          } else {
+            responseData = await response.text();
+          }
+
+          return {
+            status: response.status,
+            headers: responseHeaders,
+            data: responseData,
+            ok: response.ok
+          };
+        } catch (error) {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            throw new Error('Request timeout');
+          }
+          throw error;
+        }
+      }
+
+      // APIキー管理
+      async registerApiKey(key, description) {
+        return this.request('POST', `/kv/api-keys/${key}`, { description }, {}, false);
+      }
+
+      async listApiKeys() {
+        return this.request('GET', '/kv/api-keys', null, {}, false);
+      }
+
+      async revokeApiKey(key) {
+        return this.request('DELETE', `/kv/api-keys/${key}`, null, {}, false);
+      }
+
+      // KV操作（マスターキー使用）
+      async kvStore(key, value) {
+        return this.request('POST', `/kv/${key}`, { value }, {}, false);
+      }
+
+      async kvGet(key) {
+        return this.request('GET', `/kv/${key}`, null, {}, false);
+      }
+
+      async kvDelete(key) {
+        return this.request('DELETE', `/kv/${key}`, null, {}, false);
+      }
+
+      async kvList() {
+        return this.request('GET', '/kv', null, {}, false);
+      }
+
+      // D1操作（D1/R2 APIキー使用）
+      async d1CreateUser(name, email) {
+        return this.request('POST', '/d1/users', { name, email }, {}, true);
+      }
+
+      async d1GetUsers() {
+        return this.request('GET', '/d1/users', null, {}, true);
+      }
+
+      async d1GetUser(id) {
+        return this.request('GET', `/d1/users/${id}`, null, {}, true);
+      }
+
+      async d1UpdateUser(id, name, email) {
+        const body = {};
+        if (name) body.name = name;
+        if (email) body.email = email;
+        return this.request('PUT', `/d1/users/${id}`, body, {}, true);
+      }
+
+      async d1DeleteUser(id) {
+        return this.request('DELETE', `/d1/users/${id}`, null, {}, true);
+      }
+
+      // R2操作（D1/R2 APIキー使用）
+      async r2Upload(key, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.request('POST', `/r2/${key}`, formData, {}, true);
+      }
+
+      async r2Download(key) {
+        return this.request('GET', `/r2/${key}`, null, {}, true);
+      }
+
+      async r2Delete(key) {
+        return this.request('DELETE', `/r2/${key}`, null, {}, true);
+      }
+
+      async r2List() {
+        return this.request('GET', '/r2', null, {}, true);
+      }
+
+      // ヘルスチェック
+      async healthCheck() {
+        return this.request('GET', '/health');
+      }
+    }
+
+    // ========================================
+    // ResponseDisplay - レスポンス表示
+    // ========================================
+    class ResponseDisplay {
+      constructor(containerId) {
+        this.container = document.getElementById(containerId);
+      }
+
+      displayResponse(response) {
+        const { status, headers, data } = response;
+        const timestamp = new Date().toISOString();
+
+        let html = '';
+
+        // ステータスライン
+        const statusClass = this.getStatusClass(status);
+        html += `
+          <div class="status-line">
+            <span class="status-code ${statusClass}">${status}</span>
+            <span>${this.getStatusText(status)}</span>
+            <span class="timestamp">${timestamp}</span>
+          </div>
+        `;
+
+        // レスポンスヘッダー
+        if (headers && Object.keys(headers).length > 0) {
+          html += `
+            <div class="response-headers">
+              <h4>Headers</h4>
+              <pre>${JSON.stringify(headers, null, 2)}</pre>
+            </div>
+          `;
+        }
+
+        // レスポンスボディ
+        if (data instanceof Blob) {
+          html += `
+            <div class="response-body">
+              <pre>File downloaded successfully (${data.size} bytes)</pre>
+            </div>
+          `;
+        } else if (typeof data === 'object') {
+          html += `
+            <div class="response-body">
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            </div>
+          `;
+        } else {
+          html += `
+            <div class="response-body">
+              <pre>${data}</pre>
+            </div>
+          `;
+        }
+
+        this.container.innerHTML = html;
+      }
+
+      displayError(error) {
+        const timestamp = new Date().toISOString();
+        
+        let html = `
+          <div class="error-message">
+            <h4>Error: ${error.type || 'Unknown Error'}</h4>
+            <p>${error.message}</p>
+            <span class="timestamp">${timestamp}</span>
+        `;
+
+        if (error.details) {
+          html += `
+            <details style="margin-top: 1rem;">
+              <summary style="cursor: pointer; font-weight: 600;">Technical Details</summary>
+              <pre style="margin-top: 0.5rem; white-space: pre-wrap;">${JSON.stringify(error.details, null, 2)}</pre>
+            </details>
+          `;
+        }
+
+        html += '</div>';
+        this.container.innerHTML = html;
+      }
+
+      clear() {
+        this.container.innerHTML = '<p class="placeholder">API responses will appear here</p>';
+      }
+
+      showLoading() {
+        this.container.innerHTML = `
+          <div class="loading-indicator visible">
+            <div class="loading-spinner"></div>
+            <span>Loading...</span>
+          </div>
+        `;
+      }
+
+      hideLoading() {
+        // ローディングは自動的にレスポンス表示で置き換えられる
+      }
+
+      getStatusClass(status) {
+        if (status >= 200 && status < 300) return 'success';
+        if (status >= 400 && status < 500) return 'client-error';
+        if (status >= 500) return 'server-error';
+        return '';
+      }
+
+      getStatusText(status) {
+        const statusTexts = {
+          200: 'OK',
+          201: 'Created',
+          204: 'No Content',
+          400: 'Bad Request',
+          401: 'Unauthorized',
+          403: 'Forbidden',
+          404: 'Not Found',
+          500: 'Internal Server Error',
+          502: 'Bad Gateway',
+          503: 'Service Unavailable'
+        };
+        return statusTexts[status] || 'Unknown Status';
+      }
+    }
+
+    // ========================================
+    // ErrorHandler - エラー処理
+    // ========================================
+    class ErrorHandler {
+      static handle(error, displayComponent) {
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          displayComponent.displayError({
+            type: 'NetworkError',
+            message: 'ネットワークエラーが発生しました。APIサーバーへの接続を確認してください。'
+          });
+        } else if (error.name === 'ValidationError') {
+          displayComponent.displayError({
+            type: 'ValidationError',
+            message: error.message
+          });
+        } else if (error.message === 'Request timeout') {
+          displayComponent.displayError({
+            type: 'TimeoutError',
+            message: 'リクエストがタイムアウトしました。もう一度お試しください。'
+          });
+        } else {
+          displayComponent.displayError({
+            type: 'UnknownError',
+            message: error.message || '予期しないエラーが発生しました。',
+            details: error
+          });
+        }
+      }
+
+      static formatErrorMessage(error) {
+        if (error instanceof ValidationError) {
+          return error.message;
+        }
+        if (error.message) {
+          return error.message;
+        }
+        return '予期しないエラーが発生しました。';
+      }
+    }
+
+    // ========================================
+    // TabManager - タブ切り替え
+    // ========================================
+    class TabManager {
+      constructor() {
+        this.activeTab = 'api-keys';
+      }
+
+      switchTab(tabName) {
+        // 全てのタブとパネルを取得
+        const tabs = document.querySelectorAll('.tab');
+        const panels = document.querySelectorAll('.service-panel');
+
+        // 全てのタブを非アクティブに
+        tabs.forEach(tab => {
+          tab.classList.remove('active');
+          tab.setAttribute('aria-selected', 'false');
+        });
+
+        // 全てのパネルを非表示に
+        panels.forEach(panel => {
+          panel.classList.remove('active');
+          panel.setAttribute('hidden', '');
+        });
+
+        // 指定されたタブをアクティブに
+        const activeTab = document.querySelector(`[data-tab="${tabName}"]`);
+        if (activeTab) {
+          activeTab.classList.add('active');
+          activeTab.setAttribute('aria-selected', 'true');
+        }
+
+        // 指定されたパネルを表示
+        const activePanel = document.getElementById(`${tabName}-panel`);
+        if (activePanel) {
+          activePanel.classList.add('active');
+          activePanel.removeAttribute('hidden');
+        }
+
+        this.activeTab = tabName;
+      }
+
+      init() {
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+          tab.addEventListener('click', () => {
+            const tabName = tab.getAttribute('data-tab');
+            this.switchTab(tabName);
+          });
+        });
+      }
+    }
+
+    // ========================================
+    // APIKeyFormHandlers - APIキー管理フォーム処理
+    // ========================================
+    const APIKeyFormHandlers = {
+      async handleRegister(apiClient, responseDisplay) {
+        const form = document.getElementById('api-key-register-form');
+        const key = document.getElementById('api-key-register-key').value;
+        const description = document.getElementById('api-key-register-description').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'API Key');
+          ValidationService.validateRequired(description, 'Description');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.registerApiKey(key, description);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+            // フォームをクリア
+            form.reset();
+          } else {
+            ErrorHandler.handle(new Error(response.data.message || response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleList(apiClient, responseDisplay) {
+        const btn = document.getElementById('api-key-list-btn');
+
+        try {
+          btn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.listApiKeys();
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.message || response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          btn.disabled = false;
+        }
+      },
+
+      async handleRevoke(apiClient, responseDisplay) {
+        const form = document.getElementById('api-key-revoke-form');
+        const key = document.getElementById('api-key-revoke-key').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'API Key');
+
+          if (!confirm(`Are you sure you want to revoke API key "${key}"? This action cannot be undone.`)) {
+            return;
+          }
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.revokeApiKey(key);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+            // フォームをクリア
+            form.reset();
+          } else {
+            ErrorHandler.handle(new Error(response.data.message || response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      }
+    };
+
+    // ========================================
+    // KVFormHandlers - KVフォーム処理
+    // ========================================
+    const KVFormHandlers = {
+      async handleStore(apiClient, responseDisplay) {
+        const form = document.getElementById('kv-store-form');
+        const key = document.getElementById('kv-store-key').value;
+        const value = document.getElementById('kv-store-value').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'Key');
+          ValidationService.validateRequired(value, 'Value');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.kvStore(key, value);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleGet(apiClient, responseDisplay) {
+        const form = document.getElementById('kv-get-form');
+        const key = document.getElementById('kv-get-key').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'Key');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.kvGet(key);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleDelete(apiClient, responseDisplay) {
+        const form = document.getElementById('kv-delete-form');
+        const key = document.getElementById('kv-delete-key').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'Key');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.kvDelete(key);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleList(apiClient, responseDisplay) {
+        const btn = document.getElementById('kv-list-btn');
+
+        try {
+          btn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.kvList();
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+    };
+
+    // ========================================
+    // D1FormHandlers - D1フォーム処理
+    // ========================================
+    const D1FormHandlers = {
+      async handleCreateUser(apiClient, responseDisplay) {
+        const form = document.getElementById('d1-create-user-form');
+        const name = document.getElementById('d1-create-name').value;
+        const email = document.getElementById('d1-create-email').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(name, 'Name');
+          ValidationService.validateRequired(email, 'Email');
+          ValidationService.validateEmail(email);
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.d1CreateUser(name, email);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleGetUsers(apiClient, responseDisplay) {
+        const btn = document.getElementById('d1-get-users-btn');
+
+        try {
+          btn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.d1GetUsers();
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          btn.disabled = false;
+        }
+      },
+
+      async handleGetUser(apiClient, responseDisplay) {
+        const form = document.getElementById('d1-get-user-form');
+        const id = document.getElementById('d1-get-user-id').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(id, 'User ID');
+          ValidationService.validatePositiveInteger(id, 'User ID');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.d1GetUser(id);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleUpdateUser(apiClient, responseDisplay) {
+        const form = document.getElementById('d1-update-user-form');
+        const id = document.getElementById('d1-update-user-id').value;
+        const name = document.getElementById('d1-update-name').value;
+        const email = document.getElementById('d1-update-email').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(id, 'User ID');
+          ValidationService.validatePositiveInteger(id, 'User ID');
+
+          if (!name && !email) {
+            throw new ValidationError('At least one field (Name or Email) must be provided');
+          }
+
+          if (email) {
+            ValidationService.validateEmail(email);
+          }
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.d1UpdateUser(id, name, email);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleDeleteUser(apiClient, responseDisplay) {
+        const form = document.getElementById('d1-delete-user-form');
+        const id = document.getElementById('d1-delete-user-id').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(id, 'User ID');
+          ValidationService.validatePositiveInteger(id, 'User ID');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.d1DeleteUser(id);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      }
+    };
+
+    // ========================================
+    // R2FormHandlers - R2フォーム処理
+    // ========================================
+    const R2FormHandlers = {
+      async handleUpload(apiClient, responseDisplay) {
+        const form = document.getElementById('r2-upload-form');
+        const key = document.getElementById('r2-upload-key').value;
+        const fileInput = document.getElementById('r2-upload-file');
+        const file = fileInput.files[0];
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'Object Key');
+          ValidationService.validateFile(file);
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.r2Upload(key, file);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleDownload(apiClient, responseDisplay) {
+        const form = document.getElementById('r2-download-form');
+        const key = document.getElementById('r2-download-key').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'Object Key');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.r2Download(key);
+          
+          if (response.ok && response.data instanceof Blob) {
+            // ファイルダウンロードをトリガー
+            const url = window.URL.createObjectURL(response.data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = key.split('/').pop() || 'download';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleDelete(apiClient, responseDisplay) {
+        const form = document.getElementById('r2-delete-form');
+        const key = document.getElementById('r2-delete-key').value;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        try {
+          ValidationService.validateRequired(key, 'Object Key');
+
+          submitBtn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.r2Delete(key);
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          submitBtn.disabled = false;
+        }
+      },
+
+      async handleList(apiClient, responseDisplay) {
+        const btn = document.getElementById('r2-list-btn');
+
+        try {
+          btn.disabled = true;
+          responseDisplay.showLoading();
+
+          const response = await apiClient.r2List();
+          
+          if (response.ok) {
+            responseDisplay.displayResponse(response);
+          } else {
+            ErrorHandler.handle(new Error(response.data.error || 'Request failed'), responseDisplay);
+          }
+        } catch (error) {
+          ErrorHandler.handle(error, responseDisplay);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+    };
+
+    // ========================================
+    // ヘルスチェック機能
+    // ========================================
+    async function handleHealthCheck(apiClient, responseDisplay) {
+      const btn = document.getElementById('health-check-btn');
+      const healthStatusContainer = document.getElementById('health-status');
+
+      try {
+        btn.disabled = true;
+        responseDisplay.showLoading();
+
+        const response = await apiClient.healthCheck();
+        
+        if (response.ok) {
+          responseDisplay.displayResponse(response);
+
+          // ヘルスステータスの表示
+          const healthData = response.data;
+          if (healthData && healthData.services) {
+            let statusHtml = '<h4>Service Status:</h4>';
+            
+            const services = ['kv', 'd1', 'r2'];
+            services.forEach(service => {
+              const isHealthy = healthData.services[service];
+              const indicator = isHealthy ? 'healthy' : 'unhealthy';
+              const statusText = isHealthy ? 'Healthy' : 'Unhealthy';
+              statusHtml += `
+                <div class="service-status">
+                  <span class="status-indicator ${indicator}"></span>
+                  <span>${service.toUpperCase()}: ${statusText}</span>
+                </div>
+              `;
+            });
+
+            healthStatusContainer.innerHTML = statusHtml;
+            healthStatusContainer.classList.add('visible');
+          }
+        } else {
+          ErrorHandler.handle(new Error(response.data.error || 'Health check failed'), responseDisplay);
+        }
+      } catch (error) {
+        ErrorHandler.handle(error, responseDisplay);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ========================================
+    // アプリケーション初期化
+    // ========================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // API Base URLの復元
+      const apiBaseUrlInput = document.getElementById('api-base-url');
+      const savedBaseUrl = LocalStorageManager.load('apiBaseURL', 'http://localhost:8787');
+      apiBaseUrlInput.value = savedBaseUrl;
+
+      // APIキーの復元
+      const masterKeyInput = document.getElementById('master-api-key');
+      const d1R2KeyInput = document.getElementById('d1-r2-api-key');
+      const savedMasterKey = LocalStorageManager.load('masterApiKey', '');
+      const savedD1R2Key = LocalStorageManager.load('d1R2ApiKey', '');
+      
+      if (savedMasterKey) {
+        masterKeyInput.value = savedMasterKey;
+      }
+      if (savedD1R2Key) {
+        d1R2KeyInput.value = savedD1R2Key;
+      }
+
+      // API Base URLの保存
+      apiBaseUrlInput.addEventListener('change', () => {
+        LocalStorageManager.save('apiBaseURL', apiBaseUrlInput.value);
+      });
+
+      // APIキーの保存
+      masterKeyInput.addEventListener('change', () => {
+        LocalStorageManager.save('masterApiKey', masterKeyInput.value);
+        apiClient.setMasterKey(masterKeyInput.value);
+      });
+
+      d1R2KeyInput.addEventListener('change', () => {
+        LocalStorageManager.save('d1R2ApiKey', d1R2KeyInput.value);
+        apiClient.setD1R2ApiKey(d1R2KeyInput.value);
+      });
+
+      // コンポーネントの初期化
+      const apiClient = new APIClient(savedBaseUrl);
+      apiClient.setMasterKey(savedMasterKey);
+      apiClient.setD1R2ApiKey(savedD1R2Key);
+      
+      const responseDisplay = new ResponseDisplay('response-display');
+      const tabManager = new TabManager();
+
+      // API Base URLが変更されたらAPIClientを更新
+      apiBaseUrlInput.addEventListener('change', () => {
+        apiClient.baseURL = apiBaseUrlInput.value;
+      });
+
+      // タブマネージャーの初期化
+      tabManager.init();
+
+      // APIキー管理フォームイベント
+      document.getElementById('api-key-register-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        APIKeyFormHandlers.handleRegister(apiClient, responseDisplay);
+      });
+
+      document.getElementById('api-key-list-btn').addEventListener('click', () => {
+        APIKeyFormHandlers.handleList(apiClient, responseDisplay);
+      });
+
+      document.getElementById('api-key-revoke-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        APIKeyFormHandlers.handleRevoke(apiClient, responseDisplay);
+      });
+
+      // KVフォームイベント
+      document.getElementById('kv-store-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        KVFormHandlers.handleStore(apiClient, responseDisplay);
+      });
+
+      document.getElementById('kv-get-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        KVFormHandlers.handleGet(apiClient, responseDisplay);
+      });
+
+      document.getElementById('kv-delete-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        KVFormHandlers.handleDelete(apiClient, responseDisplay);
+      });
+
+      document.getElementById('kv-list-btn').addEventListener('click', () => {
+        KVFormHandlers.handleList(apiClient, responseDisplay);
+      });
+
+      // D1フォームイベント
+      document.getElementById('d1-create-user-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        D1FormHandlers.handleCreateUser(apiClient, responseDisplay);
+      });
+
+      document.getElementById('d1-get-users-btn').addEventListener('click', () => {
+        D1FormHandlers.handleGetUsers(apiClient, responseDisplay);
+      });
+
+      document.getElementById('d1-get-user-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        D1FormHandlers.handleGetUser(apiClient, responseDisplay);
+      });
+
+      document.getElementById('d1-update-user-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        D1FormHandlers.handleUpdateUser(apiClient, responseDisplay);
+      });
+
+      document.getElementById('d1-delete-user-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        D1FormHandlers.handleDeleteUser(apiClient, responseDisplay);
+      });
+
+      // R2フォームイベント
+      document.getElementById('r2-upload-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        R2FormHandlers.handleUpload(apiClient, responseDisplay);
+      });
+
+      document.getElementById('r2-download-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        R2FormHandlers.handleDownload(apiClient, responseDisplay);
+      });
+
+      document.getElementById('r2-delete-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        R2FormHandlers.handleDelete(apiClient, responseDisplay);
+      });
+
+      document.getElementById('r2-list-btn').addEventListener('click', () => {
+        R2FormHandlers.handleList(apiClient, responseDisplay);
+      });
+
+      // ヘルスチェックイベント
+      document.getElementById('health-check-btn').addEventListener('click', () => {
+        handleHealthCheck(apiClient, responseDisplay);
+      });
+    });
+  </script>
+</body>
+</html>
